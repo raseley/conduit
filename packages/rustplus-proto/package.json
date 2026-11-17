@@ -1,0 +1,33 @@
+{
+  "name": "@conduit/rustplus-proto",
+  "version": "2026.11.0",
+  "license": "MIT",
+  "description": "Generated Rust+ protobuf types and a thin encode/decode codec.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "gen": "node ../../scripts/gen-proto.mjs",
+    "copy:generated": "node -e \"const{cpSync,mkdirSync}=require('node:fs');mkdirSync('dist/generated',{recursive:true});cpSync('src/generated','dist/generated',{recursive:true});\"",
+    "build": "tsc -b && pnpm copy:generated",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "long": "^5.2.3",
+    "protobufjs": "^8.8.1"
+  },
+  "devDependencies": {
+    "protobufjs-cli": "^2.7.1"
+  }
+}

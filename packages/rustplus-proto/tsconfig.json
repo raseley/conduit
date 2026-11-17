@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  // The generated protobufjs static module ships as a hand-emitted `.js` +
+  // `.d.ts` pair under `src/generated/`. It is excluded from the tsc program:
+  // module resolution still finds `rustplus.d.ts` for types, and the build
+  // script copies both files into `dist/generated/` so the package is
+  // self-contained. Letting tsc compile the `.js` would conflict with the
+  // colocated `.d.ts` during declaration emit.
+  "include": ["src/**/*"],
+  "exclude": ["src/generated/**/*"]
+}

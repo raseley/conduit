@@ -1,0 +1,12 @@
+# Normalize every text file to LF, in the repository and in the working tree,
+# on every platform. Without this a Windows checkout with core.autocrlf=true
+# gets CRLF working copies, which Prettier (endOfLine: "lf") reports as
+# unformatted. Attributes take precedence over core.autocrlf.
+* text=auto eol=lf
+
+# Binary assets: never touch their bytes.
+*.png binary
+*.ico binary
+*.icns binary
+*.jpg binary
+*.gif binary

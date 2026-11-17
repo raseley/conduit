@@ -1,0 +1,76 @@
+# electron-builder configuration.
+#
+# Produces the shipped Windows artifacts: an NSIS installer AND a portable single
+# .exe. Windows is the only supported target for now; the
+# config does not preclude macOS/Linux later. Auto-update is wired against GitHub
+# Releases — left as a commented stub until the repo owner is set.
+#
+# Build it with:  pnpm --filter @conduit/desktop dist
+# (runs `tsc -b` + the renderer copy, then electron-builder — see README.)
+
+appId: com.conduit.desktop
+productName: Conduit
+copyright: Copyright © 2026
+
+directories:
+  output: release
+  buildResources: build
+
+# Ship only the compiled app + runtime assets. Exclude tests, sourcemaps, and
+# declaration files from the packaged binary (they are build artifacts, not
+# runtime). The renderer static assets under dist/renderer ARE shipped.
+files:
+  - dist/**/*
+  - "!dist/**/*.test.js"
+  - "!dist/**/*.test.d.ts"
+  - "!dist/**/*.test.js.map"
+  - "!dist/**/*.map"
+  - "!dist/**/*.d.ts"
+  - package.json
+
+# NOTE: no `asarUnpack` today. The app has no native dependencies (state is
+# plain JSON files — see the desktop README), so nothing needs to be unpacked
+# from the asar.
+#
+# Unpacking CANNOT simply be turned on later: under pnpm the workspace deps
+# (`@conduit/*`) are symlinked into node_modules and resolve to real paths under
+# `packages/`, i.e. outside this app dir. electron-builder's asarUnpack matcher
+# walks every asar-bound file and calls getRelativePath() on each, which throws
+# `<file> must be under <appDir>` on the first symlinked package file. If a
+# future build genuinely needs a native module unpacked, package from a
+# de-symlinked tree first (e.g. `pnpm --filter @conduit/desktop deploy`) and add
+# `asarUnpack` there.
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  # The Conduit mark (the app icon): a copy of assets/icon/conduit.ico, which
+  # assets/icon/render.mjs generates.
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # Launch hidden to the tray on install-finish so the app is a background
+  # coordinator from the first run.
+  runAfterFinish: true
+  # No spaces: GitHub renames release assets with spaces ("Conduit Setup 1.0.0.exe"
+  # becomes "Conduit.Setup.1.0.0.exe"), which would no longer match SHA256SUMS.txt.
+  artifactName: Conduit-${version}-setup.exe
+
+portable:
+  artifactName: Conduit-${version}-portable.exe
+
+# Auto-update against GitHub Releases. Signed updates only; configure
+# the owner/repo (and a code-signing cert) before the first release.
+# publish:
+#   provider: github
+#   owner: TBD
+#   repo: conduit
+#   releaseType: release

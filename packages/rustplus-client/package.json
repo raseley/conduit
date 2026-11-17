@@ -1,0 +1,33 @@
+{
+  "name": "@conduit/rustplus-client",
+  "version": "2026.11.0",
+  "license": "MIT",
+  "description": "WebSocket protocol client for a single authenticated Rust+ connection.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@conduit/rustplus-proto": "workspace:*",
+    "pngjs": "^7.0.0",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "@types/ws": "^8.18.2"
+  }
+}

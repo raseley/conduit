@@ -1,0 +1,302 @@
+<!doctype html>
+<!--
+  Conduit desktop renderer.
+
+  One HTML document serves both renderer surfaces: the bootstrap
+  wizard and the read-only tray status window. The surface is chosen from the URL
+  hash (#wizard / #status) — the same hash the preload reads to set
+  window.conduit.surface. Only the matching root is shown.
+
+  No control widgets in the status surface: it is read-only, showing
+  one status row per source plus "Copy diagnostics".
+
+  CSP locks the renderer to its own bundle (no remote code).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'; img-src 'self' data: https://cdn.discordapp.com;"
+    />
+    <title>Conduit</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- ── Bootstrap wizard ─────────────────────────────────────────────── -->
+    <main id="wizard" class="hidden">
+      <nav class="rail" aria-label="Setup steps">
+        <div class="rail-step" data-step="bot">
+          <span class="rail-marker"></span><span>Create bot</span>
+        </div>
+        <div class="rail-step" data-step="intents">
+          <span class="rail-marker"></span><span>Enable intents</span>
+        </div>
+        <div class="rail-step" data-step="invite">
+          <span class="rail-marker"></span><span>Invite bot</span>
+        </div>
+        <div class="rail-step" data-step="steam">
+          <span class="rail-marker"></span><span>Connect Steam</span>
+        </div>
+        <div class="rail-step" data-step="pair">
+          <span class="rail-marker"></span><span>Pair server</span>
+        </div>
+        <div class="rail-step" data-step="finish">
+          <span class="rail-marker"></span><span>Finish in Discord</span>
+        </div>
+      </nav>
+
+      <section class="pane">
+        <!-- Step 1: Create the Discord app + bot, copy its token -->
+        <div class="body" data-pane="bot">
+          <h1 class="title">Create your Discord bot</h1>
+          <p class="caption">
+            Conduit drives a Discord bot that you own. Create it and copy its token. Conduit checks
+            the token with Discord and stores it <strong>encrypted on this PC</strong>. You'll need
+            to be signed in to Discord in your browser.
+          </p>
+          <ol class="steps">
+            <li>
+              Open the
+              <a href="#" data-link="https://discord.com/developers/applications"
+                >Discord Developer Portal ▸</a
+              >
+              (sign in if asked).
+            </li>
+            <li>
+              Click <strong>New Application</strong>, name it (e.g. <strong>Conduit</strong>) and
+              click <strong>Create</strong>.
+            </li>
+            <li>
+              In the left sidebar, open the <strong>Bot</strong> tab. If you see an
+              <strong>Add Bot</strong> button, click it.
+            </li>
+            <li>
+              Click <strong>Reset Token</strong>, confirm (complete 2FA if prompted), then click
+              <strong>Copy</strong>. Discord shows a token only once.
+            </li>
+            <li>
+              Paste it below. Copy the <strong>Token</strong>, not the
+              <strong>Client Secret</strong> from the OAuth2 page.
+            </li>
+          </ol>
+          <input
+            class="field"
+            id="discord-token"
+            type="password"
+            placeholder="Bot token"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <p class="error" data-error="bot"></p>
+        </div>
+
+        <!-- Step 2: Enable the privileged intent (verified with Discord) -->
+        <div class="body hidden" data-pane="intents">
+          <h1 class="title">Enable the Server Members Intent</h1>
+          <p class="confirm hidden" data-bot-name></p>
+          <p class="caption">
+            Conduit requests the <strong>Server Members Intent</strong>, which lets the bot see your
+            server's member list and keep up as people join, leave, or change roles. This is a
+            privileged intent and is <strong>off by default</strong> —
+            <strong>the bot can't log in without it</strong>.
+          </p>
+          <ol class="steps">
+            <li>Stay on the <strong>Bot</strong> tab of your app.</li>
+            <li>Scroll to <strong>Privileged Gateway Intents</strong>.</li>
+            <li>Turn <strong>Server Members Intent</strong> <strong>ON</strong>.</li>
+            <li>
+              You can leave Presence and Message Content Intents
+              <strong>off</strong> — Conduit doesn't use them.
+            </li>
+            <li>Scroll down and click <strong>Save Changes</strong>.</li>
+          </ol>
+          <p class="caption">Then click "I've enabled it" below. Conduit checks it with Discord.</p>
+          <p class="error" data-error="intents"></p>
+        </div>
+
+        <!-- Step 3: Invite the bot; Conduit then finds the server. On a re-run
+             the bot is usually still in a server: Conduit offers it (or a
+             picker) in place of the instructions. -->
+        <div class="body hidden" data-pane="invite">
+          <h1 class="title" data-invite-title>Invite the bot to your server</h1>
+          <!-- The bot is already in one server: confirm it with Continue -->
+          <div class="hidden" data-server-found>
+            <p class="confirm" data-found-server></p>
+            <p class="caption">Click Continue to control this server.</p>
+          </div>
+          <div data-invite-instructions>
+            <p class="caption">
+              This link is pre-filled with exactly the permissions Conduit needs:
+              <strong>View Channels</strong>, <strong>Send Messages</strong>,
+              <strong>Manage Messages</strong>, <strong>Embed Links</strong>,
+              <strong>Attach Files</strong>, <strong>Read Message History</strong>,
+              <strong>Mention Everyone</strong>, and <strong>Manage Channels</strong>.
+            </p>
+            <p class="caption">
+              <strong>Mention Everyone</strong> lets alarms ping @here or @everyone and your admin
+              role. <strong>Manage Channels</strong> is used only to create Conduit's channels; you
+              can remove it afterwards in your server's role settings.
+            </p>
+            <ol class="steps">
+              <li>
+                <a href="#" id="invite-link" data-link="">Open the invite link ▸</a>
+              </li>
+              <li>
+                Pick your server from the <strong>Add to Server</strong> dropdown. This first screen
+                lists only <strong>"Add a bot to a server"</strong> and
+                <strong>"Create commands"</strong> — that's expected; those are the access types,
+                not the permission list. Click <strong>Continue</strong>.
+              </li>
+              <li>
+                The <strong>next</strong> screen shows the eight permissions above as checkboxes.
+                <strong>Keep them all ticked</strong>, then click <strong>Authorize</strong> (you
+                must be a server admin).
+              </li>
+            </ol>
+          </div>
+          <label class="check" data-create-channels>
+            <input type="checkbox" id="create-channels" checked />
+            <span>
+              <strong>Create the Conduit channels for me</strong>: a private
+              <strong>Conduit</strong> category with <strong>#conduit</strong> for the panels and
+              <strong>#conduit-log</strong> for the activity log. Only the bot and server admins see
+              them until you give your roles access. Channels that already exist are reused.
+            </span>
+          </label>
+          <p class="caption" data-invite-then>
+            Then click "I've invited the bot" below. Conduit finds your server by itself.
+          </p>
+
+          <!-- Several servers found: pick one -->
+          <div class="hidden" data-server-picker>
+            <p class="caption" data-picker-caption>
+              The bot is in more than one server. Pick the one to control:
+            </p>
+            <div class="server-list" data-server-choices></div>
+          </div>
+
+          <!-- Offered servers: the invite instructions stay one click away -->
+          <p class="caption hidden" data-invite-elsewhere>
+            <a href="#" id="invite-elsewhere">Invite it to a different server</a>
+          </p>
+
+          <!-- Manual fallback: Developer Mode → Copy Server ID -->
+          <p class="caption">
+            <a href="#" id="manual-server-toggle">Enter the Server ID manually instead</a>
+          </p>
+          <div class="hidden" data-manual-server>
+            <ol class="steps">
+              <li>
+                In Discord, open <strong>User Settings → Advanced</strong> and turn on
+                <strong>Developer Mode</strong>.
+              </li>
+              <li>
+                Right-click your server's icon in the left bar and choose
+                <strong>Copy Server ID</strong>.
+              </li>
+              <li>Paste it below.</li>
+            </ol>
+            <input
+              class="field"
+              id="server-id"
+              type="text"
+              inputmode="numeric"
+              placeholder="Server (Guild) ID"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
+          <p class="error" data-error="invite"></p>
+          <div>
+            <button class="btn btn-secondary hidden" id="retry-channels">Try again</button>
+          </div>
+        </div>
+
+        <!-- Step 4: Steam -->
+        <div class="body hidden" data-pane="steam">
+          <h1 class="title">Connect with Steam</h1>
+          <p class="confirm hidden" data-server-confirm></p>
+          <p class="caption">
+            Conduit registers with Rust+ using your Steam account — the same one you play Rust with.
+            We open Facepunch's official login in a secure window; nothing is stored except the
+            returned token.
+          </p>
+          <ol class="steps">
+            <li>Click <strong>Connect Steam</strong> below.</li>
+            <li>Sign in to Steam in the window that opens.</li>
+            <li>Approve the login (check Steam Guard / your phone if prompted).</li>
+            <li>The window closes itself when it's done.</li>
+          </ol>
+          <p class="error" data-error="steam"></p>
+          <div>
+            <button class="btn btn-secondary hidden" id="steam-diagnostics">
+              Copy diagnostics
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 5: Pair -->
+        <div class="body hidden" data-pane="pair">
+          <h1 class="title">Pair your server</h1>
+          <p class="caption">
+            Last connection step. You must be <strong>playing on the Rust server</strong> you want
+            to control, and that server must have <strong>Rust+ enabled</strong>.
+          </p>
+          <ol class="steps">
+            <li>Launch Rust and <strong>join the server</strong> you want to pair.</li>
+            <li>Press <strong>Esc</strong> to open the in-game menu.</li>
+            <li>
+              Open the <strong>Rust+</strong> section and click <strong>Pair with Server</strong>.
+            </li>
+            <li>Keep this window open — Conduit catches the pairing automatically.</li>
+          </ol>
+          <p class="caption" data-pair-status>Waiting for a pairing…</p>
+          <p class="error" data-error="pair"></p>
+        </div>
+
+        <!-- Step 6: Finish in Discord (instructional) -->
+        <div class="body hidden" data-pane="finish">
+          <h1 class="title">You're connected — finish in Discord</h1>
+          <p class="caption" data-finish-status>
+            Conduit is now running in your system tray. Do the last bit of setup from inside
+            Discord, then you're done.
+          </p>
+          <!-- Filled from WizardSnapshot.finish: which steps depend on whether
+               Conduit created its channels. -->
+          <ol class="steps" data-finish-steps></ol>
+          <p class="error" data-error="finish"></p>
+        </div>
+
+        <div class="actions">
+          <span class="spinner hidden" id="wizard-spinner"></span>
+          <button class="btn btn-primary" id="wizard-primary">Connect Steam ▸</button>
+        </div>
+      </section>
+    </main>
+
+    <!-- ── Tray status window ───────────────────────────────────────────── -->
+    <main id="status" class="hidden">
+      <div class="status-header">
+        <span class="subhead">Conduit</span>
+        <span class="status-row"
+          ><span class="dot down" id="overall-dot"></span
+          ><span class="cap" id="overall-cap">starting…</span></span
+        >
+      </div>
+      <div id="rows"></div>
+      <div class="divider"></div>
+      <p class="caption" id="token-caption"></p>
+      <div id="steam-renewal" class="hidden">
+        <button class="btn btn-primary" id="renew-steam">Sign in with Steam again</button>
+        <p class="caption" id="renew-steam-result" role="status"></p>
+      </div>
+      <div class="status-footer">
+        <button class="btn btn-secondary" id="reset-config">Reset configuration</button>
+        <button class="btn btn-secondary" id="copy-diagnostics">Copy diagnostics</button>
+      </div>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

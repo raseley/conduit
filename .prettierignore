@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+release/
+dist-electron/
+**/src/generated/
+pnpm-lock.yaml
+proto/rustplus.proto

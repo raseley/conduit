@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../packages/bot-core" },
+    { "path": "../../packages/discord" },
+    { "path": "../../packages/fcm" },
+    { "path": "../../packages/rustplus-client" }
+  ]
+}

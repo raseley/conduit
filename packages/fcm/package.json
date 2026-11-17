@@ -1,0 +1,28 @@
+{
+  "name": "@conduit/fcm",
+  "version": "2026.11.0",
+  "license": "MIT",
+  "private": true,
+  "description": "Google push delivery + Rust+ pairing. Quarantines the fragile push dependency.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@liamcottle/push-receiver": "^0.0.4"
+  }
+}

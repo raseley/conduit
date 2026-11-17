@@ -1,0 +1,9 @@
+# `node render.mjs` regenerates everything here. Only the source and the files
+# the app ships are committed; the rest are previews.
+png/*
+!png/conduit-app-256.png
+svg/*
+!svg/conduit-app.svg
+discord/avatar-preview.png
+sheet.png
+preview.html

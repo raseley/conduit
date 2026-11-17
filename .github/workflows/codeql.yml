@@ -1,0 +1,61 @@
+# CodeQL static analysis for the TypeScript/JavaScript sources. It is one of the
+# release trust checks: it scans the code the installer is built from.
+#
+# Code scanning on a private repo needs GitHub Advanced Security, so the
+# analysis is skipped while this one is private. The scheduled event carries no
+# `repository` payload, so the visibility comes from the API instead of
+# `github.event.repository.private`.
+#
+# This is CodeQL's "advanced setup". Don't also turn on "default setup" in the
+# repo settings: the two conflict.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 2" # weekly, Tuesday 03:17 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  visibility:
+    name: check repo visibility
+    runs-on: ubuntu-latest
+    outputs:
+      public: ${{ steps.check.outputs.public }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "public=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private == false')" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    name: analyze (javascript-typescript)
+    needs: visibility
+    if: needs.visibility.outputs.public == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # read workflow run info for the upload
+      security-events: write # upload the results to code scanning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: javascript-typescript
+          # Interpreted language: CodeQL reads the sources, no build needed.
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:javascript-typescript"

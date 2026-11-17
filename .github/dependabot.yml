@@ -1,0 +1,31 @@
+# Dependabot version updates: weekly PRs that keep the npm dependencies and the
+# pinned GitHub Actions current. Security updates for vulnerable dependencies are
+# a repo setting on top of this.
+version: 2
+
+updates:
+  # The pnpm workspace: Dependabot's npm ecosystem reads pnpm-lock.yaml and covers
+  # every workspace package from the root.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # One PR for all minor/patch bumps; majors stay separate, one PR each.
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  # Actions are pinned to commit SHAs; Dependabot bumps the SHA and the
+  # trailing "# vX.Y.Z" comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]

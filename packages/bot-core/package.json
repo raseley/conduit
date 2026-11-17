@@ -1,0 +1,29 @@
+{
+  "name": "@conduit/bot-core",
+  "version": "2026.11.0",
+  "license": "MIT",
+  "private": true,
+  "description": "Coordinator core: the single bridge between the Discord tier and the Rust server.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@conduit/rustplus-client": "workspace:*",
+    "@conduit/fcm": "workspace:*"
+  }
+}
