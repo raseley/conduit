@@ -1095,7 +1095,7 @@ describe("BotCore pairing wait", () => {
 
     const first = core.beginPairing();
     await vi.advanceTimersByTimeAsync(0);
-    await core.cancelPairing();
+    fcm.emit("serverPairing", makePairing());
     await first;
 
     let secondSettled = false;

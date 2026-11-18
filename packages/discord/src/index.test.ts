@@ -265,8 +265,6 @@ function makeFakeCore(state: FakeCoreState) {
   const setControlChannel = vi.fn().mockResolvedValue(undefined);
   const setLoggingChannel = vi.fn().mockResolvedValue(undefined);
   const setRoleCapabilities = vi.fn().mockResolvedValue(undefined);
-  const beginPairing = vi.fn().mockResolvedValue(undefined);
-  const cancelPairing = vi.fn().mockResolvedValue(undefined);
   const getServerInfo = vi
     .fn()
     .mockResolvedValue({ players: 12, maxPlayers: 100, queuedPlayers: 3 });
@@ -315,8 +313,6 @@ function makeFakeCore(state: FakeCoreState) {
     setControlChannel,
     setLoggingChannel,
     setRoleCapabilities,
-    beginPairing,
-    cancelPairing,
     getServerInfo,
     getServerTime,
     getTeam,
@@ -358,8 +354,6 @@ function makeFakeCore(state: FakeCoreState) {
     getServerInfo,
     getServerTime,
     getTeam,
-    beginPairing,
-    cancelPairing,
   };
 }
 
@@ -572,8 +566,8 @@ describe("DiscordAdapter dispatch", () => {
     });
     const adapter = new DiscordAdapter({ core: fake.core as never, token: "t" });
     const interaction = makeInteraction(
-      buildCustomId({ domain: "setup", action: "addDevice" }),
-      ["USER"], // user role, but addDevice is admin-only
+      buildCustomId({ domain: "setup", action: "repost" }),
+      ["USER"], // user role, but Rebuild panels is admin-only
     );
     const outcome = await adapter.dispatch(interaction);
     expect(outcome.allowed).toBe(false);
@@ -1904,12 +1898,12 @@ describe("DiscordAdapter audit log", () => {
     // @ts-expect-error inject the private client field
     adapter.client = client;
     const interaction = makeInteraction(
-      buildCustomId({ domain: "setup", action: "addDevice" }),
-      ["USER"], // user role can't drive admin-only addDevice
+      buildCustomId({ domain: "setup", action: "repost" }),
+      ["USER"], // user role can't drive admin-only Rebuild panels
       { userId: "U2" },
     );
     await adapter.dispatch(interaction);
-    expect(contentLines(sent)).toContain("[14:03:05] ⛔ <@U2> denied: setup:addDevice");
+    expect(contentLines(sent)).toContain("[14:03:05] ⛔ <@U2> denied: setup:repost");
   });
 
   it("writes nothing when no logging channel is configured", async () => {
@@ -2981,27 +2975,6 @@ describe("DiscordAdapter wired actions", () => {
     expect(sent.filter((s) => JSON.stringify(s.payload).includes("alpha"))).toHaveLength(1);
   });
 
-  it("pairing:cancel (admin) cancels the wait and re-renders the panel in place", async () => {
-    const fake = makeFakeCore({
-      config: baseConfig({ admin: ["ADMIN"], user: ["USER"] }),
-      servers: [],
-      entities: [],
-    });
-    const adapter = new DiscordAdapter({ core: fake.core as never, token: "t" });
-    const interaction = makeInteraction(
-      buildCustomId({ domain: "pairing", action: "cancel" }),
-      [],
-      { admin: true },
-    );
-    const outcome = await adapter.dispatch(interaction);
-    expect(outcome.allowed).toBe(true);
-    expect(fake.cancelPairing).toHaveBeenCalledOnce();
-    // The clicked message (the transient pairing panel) is edited in place rather
-    // than acknowledged with a bare deferUpdate.
-    expect(interaction.updates).toHaveLength(1);
-    expect(interaction.deferred).toBe(false);
-  });
-
   it("monitor:watch toggles, flips the settings' button and marks the row 👁 watching", async () => {
     const serverId = "srv-mon";
     const entityId = 8;
@@ -3075,32 +3048,8 @@ describe("DiscordAdapter server pairing panels", () => {
     expect(setServerPanelIds.mock.calls).toEqual([[serverId, { server: sent[0].id }]]);
   });
 
-  it("Setup hub Add device replies with an ephemeral pairing panel and begins pairing", async () => {
-    const fake = makeFakeCore({
-      config: baseConfig({ admin: ["ADMIN"], user: ["USER"] }),
-      servers: [],
-      entities: [],
-    });
-    const adapter = new DiscordAdapter({ core: fake.core as never, token: "t" });
-    const { client, sent } = adapterWithChannel({
-      config: fake.core.getConfig(),
-      servers: [],
-      entities: [],
-    });
-    // @ts-expect-error inject the private client field
-    adapter.client = client;
-
-    const interaction = makeInteraction(buildCustomId({ domain: "setup", action: "addDevice" }), [
-      "ADMIN",
-    ]);
-    await adapter.dispatch(interaction);
-    // No persistent channel post — the pairing panel is the ephemeral reply.
-    expect(sent).toHaveLength(0);
-    expect(interaction.ephemeralPanels).toHaveLength(1);
-    expect(fake.beginPairing).toHaveBeenCalledOnce();
-  });
-
-  it("onEntityPaired auto-dismisses the stashed ephemeral pairing panel", async () => {
+  // A device paired in-game reaches the panels with no step in Discord first.
+  it("onEntityPaired lays out the device's panel with no Setup hub step", async () => {
     const serverId = "srv-pair";
     // bot-core upserts the entity before emitting `entityPaired`, so the layout
     // onEntityPaired runs sees it in listEntities — mirror that in the fixture.
@@ -3124,14 +3073,6 @@ describe("DiscordAdapter server pairing panels", () => {
     // @ts-expect-error inject the private client field
     adapter.client = client;
 
-    // Add device → stashes the ephemeral pairing handle.
-    const addDevice = makeInteraction(buildCustomId({ domain: "setup", action: "addDevice" }), [
-      "ADMIN",
-    ]);
-    await adapter.dispatch(addDevice);
-    expect(addDevice.ephemeralPanels).toHaveLength(1);
-
-    // Device pairs → persistent control panel posts AND the ephemeral panel is deleted.
     await (
       adapter as unknown as {
         onEntityPaired(e: PairedEntity): Promise<void>;
@@ -3143,7 +3084,6 @@ describe("DiscordAdapter server pairing panels", () => {
     } as PairedEntity);
 
     expect(sent).toHaveLength(2); // the server's panel: Server and Switches
-    expect(addDevice.ephemeralDeletes).toBe(1);
   });
 });
 

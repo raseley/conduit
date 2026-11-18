@@ -907,29 +907,6 @@ describe("@conduit/bot-core", () => {
     await expect(p).resolves.toBeUndefined();
   });
 
-  it("cancelPairing resolves an in-flight beginPairing and stops the listener", async () => {
-    const { fcm, core } = setup({
-      credentials: makeStoredCreds(),
-      persistentIds: ["old-1"],
-    });
-    await core.start();
-
-    const p = core.beginPairing();
-    await vi.waitFor(() => expect(fcm.startListening).toHaveBeenCalled());
-
-    await core.cancelPairing();
-    await expect(p).resolves.toBeUndefined();
-    expect(fcm.stopListening).toHaveBeenCalled();
-  });
-
-  it("cancelPairing is a no-op when nothing is armed", async () => {
-    const { fcm, core } = setup({ credentials: makeStoredCreds() });
-    await core.start();
-    await expect(core.cancelPairing()).resolves.toBeUndefined();
-    // No begin → no settle hook to call; only the idempotent stopListening runs.
-    expect(fcm.stopListening).toHaveBeenCalledOnce();
-  });
-
   // ── credential refresh hook ─────────────────────────────────────────────────
   it("refreshCredentials refreshes via fcm, persists, and reconnects clients", async () => {
     const { store, fcm, fake, core } = setup({

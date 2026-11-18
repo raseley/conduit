@@ -418,13 +418,6 @@ export class BotCore extends EventEmitter {
 
   private started = false;
 
-  /**
-   * Settle hook for an in-flight {@link beginPairing} wait. Set while armed,
-   * cleared when the wait settles. {@link cancelPairing} calls it to resolve the
-   * pending promise early.
-   */
-  private settlePairing?: () => void;
-
   constructor(store: StateStore, fcm: FcmService, opts: BotCoreOptions = {}) {
     super();
     this.store = store;
@@ -454,7 +447,9 @@ export class BotCore extends EventEmitter {
   /**
    * Rehydrate state from the store and wire up fcm pairing/alarm listeners. Does
    * NOT auto-connect servers (the desktop scheduler / adapter decides when to
-   * `connectServer`) and does NOT arm the push listener (that is `beginPairing`).
+   * `connectServer`) and does NOT arm the push listener: the host does that once
+   * it is bootstrapped and keeps it armed, so every in-game pairing reaches
+   * `onServerPairing`/`onEntityPairing` without `beginPairing`.
    */
   async start(): Promise<void> {
     if (this.started) return;
@@ -1224,7 +1219,10 @@ export class BotCore extends EventEmitter {
   /**
    * Arm the fcm listener with stored credentials and resolve on the next pairing
    * event (server or entity), or after the pairing-timeout window. Persisted
-   * persistentIds are passed so old notifications aren't replayed.
+   * persistentIds are passed so old notifications aren't replayed. For the
+   * desktop setup wizard's "pair your server" step; once bootstrapped, the host
+   * keeps the listener armed and pairings need no call here. Nothing in bot-core
+   * stops the listener except {@link stop}: alarm and death pushes ride on it too.
    */
   async beginPairing(): Promise<void> {
     const credentials = await this.requireFcmCredentials();
@@ -1239,25 +1237,12 @@ export class BotCore extends EventEmitter {
         clearTimeout(timer);
         this.fcm.off("serverPairing", done);
         this.fcm.off("entityPairing", done);
-        this.settlePairing = undefined;
         resolve();
       };
       const timer = setTimeout(done, this.pairingTimeoutMs);
-      this.settlePairing = done;
       this.fcm.once("serverPairing", done);
       this.fcm.once("entityPairing", done);
     });
-  }
-
-  /**
-   * Cancel an in-flight {@link beginPairing} wait early (e.g. the owner hit
-   * [Cancel] on the pairing panel). Resolves the pending promise and tears down
-   * the fcm listener so a later pairing isn't captured. Idempotent — a no-op when
-   * nothing is armed.
-   */
-  async cancelPairing(): Promise<void> {
-    this.settlePairing?.();
-    await this.fcm.stopListening();
   }
 
   // ── credential refresh hook ────────────────────────────────────────────────

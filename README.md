@@ -80,9 +80,11 @@ tray.
 
 ## Adding devices
 
-In Discord, type **`/conduit setup`** and click **Add device**. Then, in Rust, open
-the switch, alarm or storage monitor and choose **Pair**. Give it a name, and it shows up in
-**#conduit**.
+In Rust, open the switch, alarm or storage monitor and choose **Pair**. It shows up in
+**#conduit** by itself. To rename it, use the **Manage a …** menu under its panel.
+
+Cameras are the exception: type **`/conduit setup`** in Discord, click **Add camera** and
+enter the camera's identifier, as set on it in-game.
 
 ## Is everything working?
 

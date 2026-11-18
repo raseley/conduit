@@ -464,7 +464,7 @@ const CHOOSE_ROLES =
 
 /** The finish step's last two steps, the same on every path. */
 const FINISH_TAIL = [
-  "Use **Add device** and pair a smart switch, alarm, or storage monitor **in-game** to control it from Discord.",
+  "Pair a smart switch, alarm, or storage monitor **in-game** and it appears in Discord by itself, ready to control.",
   "Conduit lives in the tray — right-click its icon any time for status. Click **Done** to close this window.",
 ];
 

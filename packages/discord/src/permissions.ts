@@ -160,15 +160,13 @@ const ACTION_CAPABILITY: Record<string, RequiredCapability> = {
   "setup:channel": "admin",
   "setup:adminRoles": "admin",
   "setup:userRoles": "admin",
-  "setup:addDevice": "admin",
   "setup:addCamera": "admin",
   "setup:cameraServer": "admin",
   "setup:cameraAdd": "admin",
   "setup:repost": "admin",
   "setup:startOnLogin": "admin",
   "setup:pushover": "admin",
-  // pairing
-  "pairing:cancel": "admin",
+  // naming a device (the label modal every device's Rename opens)
   "pairing:label": "admin",
 };
 
