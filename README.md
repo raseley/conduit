@@ -1,7 +1,10 @@
 # Conduit
 
-<!-- Badges (CI, OpenSSF Scorecard, latest release) go here once the repository is public and
-has its first release. -->
+[![CI](https://github.com/raseley/conduit/actions/workflows/ci.yml/badge.svg)](https://github.com/raseley/conduit/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/raseley/conduit/actions/workflows/codeql.yml/badge.svg)](https://github.com/raseley/conduit/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/raseley/conduit/badge)](https://scorecard.dev/viewer/?uri=github.com/raseley/conduit)
+[![Latest release](https://img.shields.io/github/v/release/raseley/conduit)](https://github.com/raseley/conduit/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/raseley/conduit)](LICENSE)
 
 **Control your Rust base from Discord.**
 
