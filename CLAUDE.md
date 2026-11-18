@@ -43,7 +43,9 @@ build, launch). Secrets (Steam, Discord bot token, server pairing) are entered i
 in-app wizard, not on the command line. Package a real `.exe` with
 `pnpm --filter @conduit/desktop dist` (electron-builder).
 
-Tests use **vitest** (workspace defined in `vitest.workspace.ts`). Codegen uses
+Tests use **vitest**: each package has its own `vitest.config.ts` (it limits discovery to
+`src/`, since the build also compiles tests into `dist/`), and the root `vitest.config.ts`
+lists the packages as `projects` for running everything from the root. Codegen uses
 **protobufjs static-module** (`pbjs`/`pbts`), NOT ts-proto or `protoc` — `protoc` is
 deliberately avoided so no native toolchain is needed.
 
@@ -271,7 +273,7 @@ main entry directly. Note `.js` extensions on relative imports (NodeNext resolut
   no `Long`, no protobuf — so any `StateStore` backend round-trips them losslessly. Entity
   ids are 64-bit on the server but stored as JS numbers (exact up to 2^53); the boundaries
   (`rustplus-client` mappers, fcm's `reqEntityId`) reject anything a number cannot hold.
-- **Tests**: vitest workspace; tests are co-located as `*.test.ts`, and a package's behavior
+- **Tests**: vitest, one project per package; tests are co-located as `*.test.ts`, and a package's behavior
   is exercised through its `index.test.ts` against the public surface. The core
   orchestrators additionally have focused suites named after their module
   (`bot-core.test.ts`, `client.test.ts`, `adapter.test.ts`, `state-lock.test.ts`) — put
