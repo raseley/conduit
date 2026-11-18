@@ -150,7 +150,9 @@ pnpm --filter @conduit/bot-core exec vitest run src/index.test.ts
 pnpm --filter @conduit/bot-core exec vitest run -t "name of test"
 ```
 
-Tests use **vitest** (workspace defined in `vitest.workspace.ts`).
+Tests use **vitest**. Each package has its own `vitest.config.ts`, which limits discovery to
+`src/` (the build also compiles tests into `dist/`); the root `vitest.config.ts` lists the
+packages as `projects` for running everything from the root.
 
 ### Code style
 
