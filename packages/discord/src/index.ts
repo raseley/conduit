@@ -86,7 +86,6 @@ export {
   buildCameraSettingsPanel,
   buildCameraFramePanel,
   buildSetupPanel,
-  buildPairingPanel,
   buildSwitchGroupPanel,
   buildSwitchGroupPickerPanel,
   layoutServer,

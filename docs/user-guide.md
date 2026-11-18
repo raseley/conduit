@@ -45,8 +45,8 @@ From there you can:
 - pick the **control channel** for the panels and the **logging channel** for the activity
   log (the wizard's #conduit and #conduit-log, or channels of your own);
 - choose the **Admin roles** and **User roles** (see below);
-- add devices and cameras, post the panels afresh with **Rebuild panels**, set up **Pushover**,
-  and turn **Start on login** on or off.
+- add cameras, post the panels afresh with **Rebuild panels**, set up **Pushover**, and turn
+  **Start on login** on or off. Other devices need nothing here: pair them in-game.
 
 Anyone with a Conduit role can run **`/conduit status`** for a quick status with links to
 the panels.
@@ -108,9 +108,9 @@ Alarm alerts are posted in the logging channel, so choose one if you want them.
 
 ### Pairing more devices and servers
 
-- **A device** (smart switch, smart alarm or storage monitor): click **Add device** in the
-  Setup hub, then in Rust open the device and choose **Pair**. Conduit asks you to name it
-  and adds it to the panels.
+- **A device** (smart switch, smart alarm or storage monitor): in Rust, open the device and
+  choose **Pair**. Conduit adds it to the panels by itself; rename it from the **Manage a …**
+  menu under its panel.
 - **A camera:** click **Add camera** in the Setup hub and enter the camera's identifier,
   as set on it in-game.
 - **Another server:** join it in Rust and use **Pair with Server** in the Rust+ menu, as in

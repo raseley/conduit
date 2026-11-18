@@ -95,7 +95,6 @@ import {
   buildGroupNoticePanel,
   buildMonitorContentsPanel,
   buildMonitorSettingsPanel,
-  buildPairingPanel,
   buildRemoveConfirmPanel,
   buildRemovedNoticePanel,
   buildSetupPanel,
@@ -444,7 +443,7 @@ export interface PostErrorInfo {
 /**
  * A handle to an already-sent ephemeral reply, so the adapter can edit or delete
  * it later — even from an async domain-event handler with no interaction in scope
- * (e.g. auto-dismissing the pairing panel when `entityPaired` arrives via FCM).
+ * (e.g. keeping a switch group's panel live as its members change).
  * Backed by the interaction webhook, it is valid for ~15 minutes; callers wrap
  * `editPanel`/`delete` in try/catch so an expired token degrades gracefully.
  */
@@ -513,8 +512,8 @@ export interface DispatchableInteraction {
 /**
  * Domains whose admin-gated actions a Discord Administrator (incl. the server
  * owner) may perform even with no Conduit roles mapped. Scoped to the Setup hub
- * flow — channel/role mapping, device pairing — so the owner can always complete
- * setup. Device-control panels (switch/alarm/monitor/camera) stay strictly
+ * flow — channel/role mapping, adding cameras, naming devices (`pairing:label`) —
+ * so the owner can always complete setup. Device-control panels (switch/alarm/monitor/camera) stay strictly
  * role-gated by design, even for the owner.
  */
 const ADMIN_BYPASS_DOMAINS = new Set(["setup", "pairing"]);
@@ -808,13 +807,6 @@ export class DiscordAdapter {
    * Server message's team line. Cleared when a server goes offline.
    */
   private readonly lastTeam = new Map<string, TeamInfo>();
-
-  /**
-   * Handle to the in-flight pairing flow's ephemeral panel, stashed when [Add
-   * device] is clicked so `onEntityPaired` can auto-dismiss it. Single-slot:
-   * bot-core's `beginPairing`/`cancelPairing` are themselves singular.
-   */
-  private pairingDismiss?: EphemeralHandle;
 
   /**
    * Serialises every operation that posts, deletes or re-lays out persistent
@@ -2048,13 +2040,6 @@ export class DiscordAdapter {
       const handle = interaction.values?.[0];
       if (handle) await this.showAddCameraModal(handle, interaction);
       else await interaction.deferUpdate?.();
-      return;
-    }
-    // Cancel the armed pairing wait and re-render the transient panel in place.
-    // Intercepted before the generic deferUpdate path: update() acknowledges the
-    // click itself and cannot follow a deferUpdate.
-    if (parsed.domain === "pairing" && parsed.action === "cancel") {
-      await this.handlePairingCancel(interaction);
       return;
     }
     switch (parsed.domain) {
@@ -3439,21 +3424,6 @@ export class DiscordAdapter {
         await interaction.replyEphemeral("✅ Role permissions updated.");
         return;
       }
-      case "addDevice": {
-        // Reply with the transient pairing panel (armed) as an ephemeral message —
-        // visible only to this admin. Stash its handle so onEntityPaired can
-        // auto-dismiss it once the device pairs. Falls back to deferUpdate in the
-        // (test) case where the seam isn't provided.
-        if (interaction.replyEphemeralPanel) {
-          this.pairingDismiss = await interaction.replyEphemeralPanel(
-            toPanelPayload(buildPairingPanel({ armed: true })),
-          );
-        } else {
-          await interaction.deferUpdate?.();
-        }
-        void this.core.beginPairing();
-        return;
-      }
       case "repost": {
         // Setup → Rebuild panels. The custom id keeps its old name, so Setup hubs
         // already posted keep working.
@@ -3694,26 +3664,6 @@ export class DiscordAdapter {
         { err, serverId, entityId, occasion },
         "tool cupboard read for its upkeep failed",
       );
-    }
-  }
-
-  // ── pairing cancel ───────────────────────────────────────────────────────────
-
-  /**
-   * [Cancel] on the transient pairing panel: stop the armed fcm wait and re-render
-   * the panel to a disabled "cancelled" state. The panel isn't tracked by id, so
-   * the edit goes through the interaction's own message via update().
-   */
-  private async handlePairingCancel(interaction: DispatchableInteraction): Promise<void> {
-    await this.core.cancelPairing();
-    // The armed wait is over; drop the stashed dismiss handle (the click itself
-    // re-renders the ephemeral panel below).
-    this.pairingDismiss = undefined;
-    const payload = toPanelPayload(buildPairingPanel({ armed: false, cancelled: true }));
-    if (interaction.update) {
-      await interaction.update(payload);
-    } else {
-      await interaction.deferUpdate?.();
     }
   }
 
@@ -4497,18 +4447,6 @@ export class DiscordAdapter {
     // in `listEntities`. Its row lands in alphabetical order within its type's
     // message; the first device of a type reposts the group, to keep the order.
     await this.syncGroup(entity.serverId);
-    // Auto-dismiss the transient ephemeral pairing panel now the device is paired
-    // and on the panel. Best-effort: the interaction token may have expired
-    // (pairing took >15 min).
-    if (this.pairingDismiss) {
-      const dismiss = this.pairingDismiss;
-      this.pairingDismiss = undefined;
-      try {
-        await dismiss.delete();
-      } catch (err) {
-        this.log.warn({ err }, "pairing panel auto-dismiss failed (token expired?)");
-      }
-    }
   }
 
   /**

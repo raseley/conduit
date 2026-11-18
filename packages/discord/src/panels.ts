@@ -4,7 +4,7 @@
  * Each server's persistent **Conduit Panel** is laid out by {@link layoutServer}:
  * a Server message plus one message per device type, posted once and
  * then only edited. The other builders here make the ephemeral panels (Setup
- * hub, pairing, each device's settings, a monitor's contents, a camera frame).
+ * hub, each device's settings, a monitor's contents, a camera frame).
  * Every builder is a **pure function**: given domain state (from bot-core) and
  * the handles that mint customIds, it returns a {@link ContainerBuilder} (the
  * V2 `IS_COMPONENTS_V2` container of text/section/separator/media + action
@@ -940,11 +940,6 @@ export function buildSetupPanel(args: {
     .addActionRowComponents(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(buildCustomId({ domain: "setup", action: "addDevice" }))
-          .setLabel("Add device")
-          .setEmoji("➕")
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
           .setCustomId(buildCustomId({ domain: "setup", action: "addCamera" }))
           .setLabel("Add camera")
           .setEmoji("📷")
@@ -963,37 +958,6 @@ export function buildSetupPanel(args: {
           .setCustomId(buildCustomId({ domain: "setup", action: "startOnLogin" }))
           .setLabel(`Start on login: ${startOnLogin ? "ON" : "OFF"}`)
           .setStyle(ButtonStyle.Secondary),
-      ),
-    );
-}
-
-// ── Pairing (transient) panel ─────────────────────────────────────────────────
-
-export function buildPairingPanel(args: { armed: boolean; cancelled?: boolean }): ContainerBuilder {
-  const { armed, cancelled } = args;
-  const heading = cancelled
-    ? "## 🔗 Pairing cancelled"
-    : armed
-      ? "## 🔗 Pairing armed — listening…"
-      : "## 🔗 Pairing complete";
-  const body = cancelled
-    ? "Stopped listening. Use Add device to try again."
-    : armed
-      ? 'In Rust, open the device and choose "Pair".'
-      : "Device paired — name it to finish.";
-  return new ContainerBuilder()
-    .setAccentColor(ACCENT_IDLE)
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(heading),
-      new TextDisplayBuilder().setContent(body),
-    )
-    .addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(buildCustomId({ domain: "pairing", action: "cancel" }))
-          .setLabel("Cancel")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(!armed),
       ),
     );
 }

@@ -313,8 +313,6 @@ class FakeCore extends EventEmitter {
     await this.invoke("setStartOnLogin", [enabled], undefined);
     this.state.config.startOnLogin = enabled;
   };
-  beginPairing = () => this.invoke("beginPairing", [], undefined);
-  cancelPairing = () => this.invoke("cancelPairing", [], undefined);
   getServerInfo = (serverId: string) =>
     this.invoke("getServerInfo", [serverId], { players: 12, maxPlayers: 100, queuedPlayers: 3 });
   /** What `getTeam` reports. */
@@ -1095,7 +1093,7 @@ describe("dispatcher: per-click permission check", () => {
 
   it("tells a member with no mapped role an admin role is needed on an admin-gated action", async () => {
     const h = makeHarness(deviceState());
-    const click = makeClick(h.id("setup", "addDevice"), { roles: [] });
+    const click = makeClick(h.id("setup", "repost"), { roles: [] });
 
     const outcome = await h.adapter.dispatch(click.interaction);
 
@@ -1196,7 +1194,9 @@ describe("dispatcher: per-click permission check", () => {
     },
   );
 
-  it("extends the Discord-Administrator bypass to the pairing flow", async () => {
+  // The push listener that receives pairings also carries alarm and death alerts,
+  // so a Cancel left on a pairing message posted by an older build must not stop it.
+  it("acknowledges a pairing Cancel click from an older build without calling bot-core", async () => {
     const h = makeHarness(
       deviceState({ config: makeConfig({ roleCapabilities: { admin: [], user: [] } }) }),
     );
@@ -1205,8 +1205,8 @@ describe("dispatcher: per-click permission check", () => {
     const outcome = await h.adapter.dispatch(click.interaction);
 
     expect(outcome.allowed).toBe(true);
-    expect(h.core.callsTo("cancelPairing")).toHaveLength(1);
-    expect(click.order()).toEqual(["update"]);
+    expect(h.core.calls).toEqual([]);
+    expect(click.order()).toEqual(["deferUpdate"]);
   });
 
   it.each<[CustomIdDomain, string, number | undefined]>([
@@ -1301,7 +1301,7 @@ describe("dispatcher: per-click permission check", () => {
   it("treats an unreadable permission bitfield as not-an-administrator", async () => {
     const h = makeHarness(deviceState());
     const click = makeGatewayInteraction({
-      customId: h.id("setup", "addDevice"),
+      customId: h.id("setup", "repost"),
       roles: [],
       administrator: "throws",
     });
@@ -2451,7 +2451,7 @@ describe("dispatcher: failures become friendly ephemeral replies", () => {
   it("never rejects out of the gateway listener when a denial reply fails", async () => {
     const h = makeHarness(deviceState());
     const click = makeGatewayInteraction({
-      customId: h.id("setup", "addDevice"),
+      customId: h.id("setup", "repost"),
       roles: ["USER"],
       failReplyWith: namedError("DiscordAPIError", "Unknown interaction"),
     });
@@ -2670,11 +2670,12 @@ describe("dispatcher: acknowledgement safety", () => {
       expected: ["showModal"],
     },
     {
+      // Only on a pairing message an older build posted.
       name: "pairing:cancel",
       domain: "pairing",
       action: "cancel",
       role: "ADMIN",
-      expected: ["update"],
+      expected: ["deferUpdate"],
     },
     {
       name: "setup:startOnLogin",
@@ -2846,53 +2847,6 @@ describe("dispatcher: acknowledgement safety", () => {
     expect(reply?.content).toBeUndefined();
     expect(isEphemeral(reply?.flags)).toBe(true);
     expect((reply?.flags ?? 0) & MessageFlags.IsComponentsV2).toBe(MessageFlags.IsComponentsV2);
-  });
-
-  it("auto-dismisses the ephemeral pairing panel exactly once when the device pairs", async () => {
-    const h = makeHarness(postedState(), { existingMessages: POSTED_MESSAGES });
-    await h.start();
-    const addDevice = makeGatewayInteraction({
-      customId: h.id("setup", "addDevice"),
-      roles: ["ADMIN"],
-    });
-    await h.adapter.onInteraction(addDevice.interaction);
-    expect(addDevice.order()).toEqual(["reply"]);
-    expect(h.core.callsTo("beginPairing")).toHaveLength(1);
-
-    const paired = makeEntity(42, "switch", { label: "New Switch" });
-    h.state.entities.push(paired);
-    h.core.emit("entityPaired", paired);
-    await flush();
-    expect(addDevice.order()).toEqual(["reply", "deleteReply"]);
-
-    // A later pairing has no stashed panel left to dismiss.
-    h.core.emit("entityPaired", paired);
-    await flush();
-    expect(addDevice.order()).toEqual(["reply", "deleteReply"]);
-  });
-
-  it("drops the pairing panel handle on cancel so a later pairing does not delete it", async () => {
-    const h = makeHarness(postedState(), { existingMessages: POSTED_MESSAGES });
-    await h.start();
-    const addDevice = makeGatewayInteraction({
-      customId: h.id("setup", "addDevice"),
-      roles: ["ADMIN"],
-    });
-    await h.adapter.onInteraction(addDevice.interaction);
-    const cancel = makeGatewayInteraction({
-      customId: h.id("pairing", "cancel"),
-      roles: ["ADMIN"],
-    });
-    await h.adapter.onInteraction(cancel.interaction);
-    expect(cancel.order()).toEqual(["update"]);
-    expect(h.core.callsTo("cancelPairing")).toHaveLength(1);
-
-    const paired = makeEntity(42, "switch", { label: "New Switch" });
-    h.state.entities.push(paired);
-    h.core.emit("entityPaired", paired);
-    await flush();
-
-    expect(addDevice.order()).toEqual(["reply"]);
   });
 });
 
@@ -4529,7 +4483,7 @@ describe("adapter: lifecycle", () => {
   it("routes gateway InteractionCreate events through the dispatcher once started", async () => {
     const h = makeHarness(deviceState());
     await h.start();
-    const click = makeGatewayInteraction({ customId: h.id("setup", "addDevice"), roles: ["USER"] });
+    const click = makeGatewayInteraction({ customId: h.id("setup", "repost"), roles: ["USER"] });
 
     h.client.emit(Events.InteractionCreate, click.interaction);
     await flush();
