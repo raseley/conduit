@@ -111,7 +111,9 @@ export default tseslint.config(
     ["@conduit/rustplus-proto"],
     ["electron", "discord.js"],
   ),
-  layerBoundary("packages/fcm", [], ["electron", "discord.js"]),
+  // fcm's push client carries its own small protobuf codec (src/push/wire.ts), so
+  // protobufjs and long, which only the old push library needs, stay out of it.
+  layerBoundary("packages/fcm", [], ["electron", "discord.js", "protobufjs", "long"]),
   layerBoundary(
     "packages/bot-core",
     ["@conduit/rustplus-client", "@conduit/fcm"],

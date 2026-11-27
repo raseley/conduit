@@ -45,7 +45,15 @@ export { FACEPUNCH_LOGIN_URL, RUST_PLUS_AUTH_REDIRECT } from "./constants.js";
 export { decodePush, type DecodedPush } from "./decode.js";
 
 // Typed errors.
-export { FcmError, AuthError, PairingError, ConnectionError } from "./errors.js";
+export {
+  FcmError,
+  AuthError,
+  PairingError,
+  ConnectionError,
+  ProtocolError,
+  type FcmErrorCategory,
+  type PushFailure,
+} from "./errors.js";
 
 // Redaction + logger seam.
 export { redact, noopLogger, REDACTED, SENSITIVE_KEYS, type Logger } from "./redact.js";

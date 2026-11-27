@@ -55,6 +55,9 @@ export const SENSITIVE_KEYS: readonly string[] = Object.freeze([
   "expoPushToken",
   "pushToken",
   "securityToken",
+  // The GCM device id. The push client handles it as a bare value (the login's
+  // `user`, `resource` and `device_id`), not only inside `gcm`.
+  "androidId",
   "privateKey",
   "secret",
   "authSecret",
