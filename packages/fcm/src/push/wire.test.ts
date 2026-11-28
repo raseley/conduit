@@ -77,6 +77,14 @@ describe("Writer and Reader round trips", () => {
     expect(out.buffer).not.toBe(bytes.buffer);
   });
 
+  it("bytes from a Node Buffer are a copy, not a view", () => {
+    const source = Buffer.from(new Writer().bytes(21, fromHex("00ff10")).finish());
+    const out = readOne(source, 21, (r) => r.bytes());
+    source.fill(0);
+    expect(toHex(out)).toBe("00ff10");
+    expect(Buffer.isBuffer(out)).toBe(false);
+  });
+
   it("nested messages, and large ones that grow the buffer", () => {
     const long = "x".repeat(5000);
     const bytes = new Writer().message(4, (inner) => inner.string(2, long).int32(3, 1)).finish();
@@ -120,7 +128,7 @@ describe("Reader fails closed", () => {
     // The tenth byte still has its continuation bit set.
     expectProtocolError(
       () => new Reader(fromHex("8080808080808080808001")).varint(),
-      /overflows 64 bits/,
+      /longer than 10 bytes/,
     );
   });
 
@@ -177,6 +185,13 @@ describe("Writer rejects values it cannot encode", () => {
     ["fixed64 negative", () => new Writer().fixed64(1, -1n)],
     ["uint64 at 2^64", () => new Writer().uint64(1, 2n ** 64n)],
     ["field 0", () => new Writer().int32(0, 1)],
+    ["varint fraction", () => new Writer().varint(1.5)],
+    ["varint NaN", () => new Writer().varint(Number.NaN)],
+    ["varint unsafe integer", () => new Writer().varint(2 ** 53)],
+    ["varint negative", () => new Writer().varint(-1)],
+    ["tag with a group wire type", () => new Writer().tag(1, WireType.StartGroup)],
+    ["tag with wire type 6", () => new Writer().tag(1, 6)],
+    ["tag with a fractional wire type", () => new Writer().tag(1, 0.5)],
   ])("%s", (_name, fn) => {
     expect(fn).toThrow(ProtocolError);
   });

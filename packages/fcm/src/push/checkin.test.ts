@@ -157,6 +157,27 @@ describe("checkIn", () => {
     await expect(checkIn({ httpsRequest })).rejects.toMatchObject({ failure: "refused" });
   });
 
+  it("passes the seam's kind-less ConnectionError through unchanged", async () => {
+    const original = new ConnectionError("Request could not be sent");
+    const { httpsRequest } = fakeHttps(async () => {
+      throw original;
+    });
+    await expect(checkIn({ httpsRequest })).rejects.toBe(original);
+  });
+
+  it("uses an injected timer seam for its 15 s timeout", async () => {
+    const pending: { cb: () => void; ms: number }[] = [];
+    const timers = {
+      setTimer: (cb: () => void, ms: number) => pending.push({ cb, ms }),
+      clearTimer: () => {},
+    };
+    const { httpsRequest } = fakeHttps(() => new Promise<never>(() => {}));
+    const result = checkIn({ httpsRequest, timers });
+    expect(pending.map((t) => t.ms)).toEqual([CHECKIN_TIMEOUT_MS]);
+    pending[0]!.cb();
+    await expect(result).rejects.toMatchObject({ failure: "network" });
+  });
+
   it("gives up after 15 s with no response, even if the seam ignores its signal", async () => {
     vi.useFakeTimers();
     let seenSignal: AbortSignal | undefined;
@@ -177,14 +198,18 @@ describe("checkIn", () => {
     await expect(pending).rejects.toThrow(/15000 ms/);
   });
 
-  it("stops at once when the caller aborts", async () => {
+  it("stops at once when the caller aborts, and does not call that a failure", async () => {
     vi.useFakeTimers();
     const controller = new AbortController();
     const { httpsRequest } = fakeHttps(() => new Promise<never>(() => {}));
     const pending = checkIn({ httpsRequest, signal: controller.signal });
-    const outcome = expect(pending).rejects.toThrow(/cancelled/);
+    const outcome = pending.catch((e: unknown) => e);
     controller.abort();
-    await outcome;
+    const err = await outcome;
+    expect(err).toBeInstanceOf(ConnectionError);
+    expect((err as Error).message).toMatch(/cancelled/);
+    // An abort is the client's own destroy(), never a failure to count.
+    expect((err as ConnectionError).failure).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -192,9 +217,9 @@ describe("checkIn", () => {
     const controller = new AbortController();
     controller.abort();
     const { httpsRequest, requests } = fakeHttps(async () => response());
-    await expect(checkIn({ httpsRequest, signal: controller.signal })).rejects.toMatchObject({
-      failure: "network",
-    });
+    const err = await checkIn({ httpsRequest, signal: controller.signal }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConnectionError);
+    expect((err as ConnectionError).failure).toBeUndefined();
     expect(requests).toHaveLength(0);
   });
 

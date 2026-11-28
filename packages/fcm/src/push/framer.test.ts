@@ -60,6 +60,43 @@ describe("createFramer", () => {
     expect(asHex(frames)).toEqual(expected);
   });
 
+  it("does not hand out views of a Node Buffer chunk, whose slice() shares memory", () => {
+    // Inside a larger pooled buffer, as socket reads often are.
+    const pool = Buffer.alloc(stream.byteLength + 32, 0xee);
+    pool.set(stream, 16);
+    const chunk = pool.subarray(16, 16 + stream.byteLength);
+    const frames = createFramer().push(chunk);
+    pool.fill(0);
+    expect(asHex(frames)).toEqual(expected);
+    for (const frame of frames) expect(Buffer.isBuffer(frame.payload)).toBe(false);
+  });
+
+  it("survives the caller reusing its read buffer mid-frame", () => {
+    const framer = createFramer();
+    const readBuffer = Buffer.alloc(stream.byteLength);
+    const frames: Frame[] = [];
+    // Two reads into the same buffer, the first ending inside the data frame.
+    const cut = Math.floor(stream.byteLength / 2);
+    stream.subarray(0, cut).forEach((byte, i) => (readBuffer[i] = byte));
+    frames.push(...framer.push(readBuffer.subarray(0, cut)));
+    readBuffer.fill(0);
+    stream.subarray(cut).forEach((byte, i) => (readBuffer[i] = byte));
+    frames.push(...framer.push(readBuffer.subarray(0, stream.byteLength - cut)));
+    expect(asHex(frames)).toEqual(expected);
+  });
+
+  it("takes a frame at the cap one byte at a time without quadratic copying", () => {
+    const payload = new Uint8Array(MAX_FRAME_BYTES).fill(7);
+    const bytes = encodeFrame(McsTag.DataMessageStanza, payload, { version: 41 });
+    const framer = createFramer();
+    const frames: Frame[] = [];
+    for (let i = 0; i < bytes.byteLength; i++) {
+      frames.push(...framer.push(bytes.subarray(i, i + 1)));
+    }
+    expect(frames).toHaveLength(1);
+    expect(frames[0]?.payload).toEqual(payload);
+  });
+
   it("accepts version 38 and versions above 41", () => {
     const body = encodeFrame(McsTag.Close, new Uint8Array());
     for (const version of [38, 41, 42, 127]) {
@@ -102,9 +139,32 @@ describe("createFramer", () => {
 
   it("stays failed after a protocol error", () => {
     const framer = createFramer();
-    expect(() => framer.push(new Uint8Array([1]))).toThrow(ProtocolError);
-    expect(() => framer.push(stream)).toThrow(/already failed/);
+    expect(() => framer.push(new Uint8Array([1]))).toThrow(/unsupported MCS version 1/);
+    expect(() => framer.push(stream)).toThrow(/unsupported MCS version 1/);
   });
+
+  it("returns the good frames before a bad one, then throws on the next push", () => {
+    const framer = createFramer();
+    const good = [
+      encodeFrame(McsTag.HeartbeatPing, fromHex("1003")),
+      encodeFrame(McsTag.Close, new Uint8Array()),
+    ];
+    const oversize = encodeFrame(McsTag.DataMessageStanza, new Uint8Array(MAX_FRAME_BYTES + 1));
+    const chunk = new Uint8Array([41, ...good[0]!, ...good[1]!, ...oversize.subarray(0, 4)]);
+    expect(asHex(framer.push(chunk))).toEqual([
+      { tag: McsTag.HeartbeatPing, payloadHex: "1003" },
+      { tag: McsTag.Close, payloadHex: "" },
+    ]);
+    expect(() => framer.push(new Uint8Array())).toThrow(/cap/);
+    expect(() => framer.push(stream)).toThrow(/cap/);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 32])(
+    "rejects maxFrameBytes %s",
+    (maxFrameBytes) => {
+      expect(() => createFramer({ maxFrameBytes })).toThrow(ProtocolError);
+    },
+  );
 
   it("an empty chunk yields nothing", () => {
     const framer = createFramer();
@@ -128,5 +188,9 @@ describe("encodeFrame", () => {
 
   it("rejects a tag that does not fit in a byte", () => {
     expect(() => encodeFrame(256, new Uint8Array())).toThrow(ProtocolError);
+  });
+
+  it.each([-1, 256, 1.5, Number.NaN])("rejects version %s", (version) => {
+    expect(() => encodeFrame(McsTag.Close, new Uint8Array(), { version })).toThrow(ProtocolError);
   });
 });

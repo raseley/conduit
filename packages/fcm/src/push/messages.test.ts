@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ProtocolError } from "../errors.js";
 import { CHECKIN_REQUESTS, CHECKIN_RESPONSES } from "./fixtures/checkin.js";
-import { HEARTBEATS, LOGIN_REQUESTS, SERVER_FRAMES } from "./fixtures/mcs.js";
+import { HEARTBEATS, LOGIN_REQUESTS, SERVER_FRAMES, SERVER_STREAM } from "./fixtures/mcs.js";
 import { encodeFrame } from "./framer.js";
 import type { PushIdentity } from "./identity.js";
 import {
@@ -233,6 +233,9 @@ describe("decoding server frames", () => {
     for (const frame of Object.values(SERVER_FRAMES)) {
       expect(McsTag[frame.type as keyof typeof McsTag]).toBe(frame.tag);
     }
+    // The fixtures' tags and version byte are read from push-receiver's
+    // constants by the capture script, so this is not a self-check.
+    expect(SERVER_STREAM.version).toBe(MCS_VERSION);
     expect(McsTag).toMatchObject({ HeartbeatPing: 0, HeartbeatAck: 1, LoginRequest: 2 });
   });
 });

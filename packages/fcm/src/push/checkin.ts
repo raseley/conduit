@@ -16,6 +16,7 @@ import { ConnectionError, ProtocolError } from "../errors.js";
 import type { HttpsRequest, HttpsResponse } from "./http.js";
 import { DEFAULT_IDENTITY, type PushIdentity } from "./identity.js";
 import { decodeCheckinResponse, encodeCheckinRequest, type DeviceCredentials } from "./messages.js";
+import { defaultTimers, type TimerProvider } from "./timers.js";
 
 export const CHECKIN_URL = "https://android.clients.google.com/checkin";
 
@@ -41,6 +42,8 @@ export interface CheckInOptions {
   identity?: PushIdentity;
   /** Clock for an HTTP-date `Retry-After`; defaults to `Date.now`. */
   now?: () => number;
+  /** Timers for the 15 s timeout; defaults to the global timers. */
+  timers?: TimerProvider;
 }
 
 /**
@@ -48,11 +51,13 @@ export interface CheckInOptions {
  * securityToken }` as decimal strings.
  *
  * Throws {@link ConnectionError} with `failure`:
- * - `network`: no response (transport error, timeout, or the caller aborted);
+ * - `network`: no response (transport error or timeout);
  * - `credentials`: HTTP 400 or 401 (Google rejected the device), or stored
  *   credentials too malformed to send;
  * - `refused`: any other non-200, or a 200 whose body does not decode; on a 429
- *   or 503 it carries the parsed `Retry-After` as `retryAfterMs`.
+ *   or 503 it carries the parsed `Retry-After` as `retryAfterMs`;
+ * - none: the caller aborted (an abort is not a failure, see `send`), or the
+ *   HTTPS seam rejected the request with its own kind-less error.
  */
 export async function checkIn(options: CheckInOptions): Promise<DeviceCredentials> {
   const identity = options.identity ?? DEFAULT_IDENTITY;
@@ -113,17 +118,21 @@ function encodeRequest(
   }
 }
 
-/** One POST, bounded by the timeout and the caller's signal. */
+/**
+ * One POST, bounded by the timeout and the caller's signal.
+ *
+ * A caller abort rejects with a {@link ConnectionError} that has NO failure
+ * kind: an abort is not a failure (it is the client's own `destroy()`), so it
+ * must never count towards the connection's failure tally.
+ */
 async function send(options: CheckInOptions, body: Uint8Array): Promise<HttpsResponse> {
   if (options.signal?.aborted) {
-    throw new ConnectionError("Check-in was cancelled", {
-      failure: "network",
-      cause: options.signal.reason,
-    });
+    throw new ConnectionError("Check-in was cancelled", { cause: options.signal.reason });
   }
+  const timers = options.timers ?? defaultTimers;
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => {
+  const timer = timers.setTimer(() => {
     timedOut = true;
     controller.abort();
   }, CHECKIN_TIMEOUT_MS);
@@ -158,15 +167,17 @@ async function send(options: CheckInOptions, body: Uint8Array): Promise<HttpsRes
       });
     }
     if (options.signal?.aborted) {
-      throw new ConnectionError("Check-in was cancelled", { failure: "network", cause: err });
+      // Not a failure: see above.
+      throw new ConnectionError("Check-in was cancelled", { cause: err });
     }
-    if (err instanceof ConnectionError && err.failure !== undefined) throw err;
+    // The production seam has already classified its own errors.
+    if (err instanceof ConnectionError) throw err;
     throw new ConnectionError("Check-in got no response from Google", {
       failure: "network",
       cause: err,
     });
   } finally {
-    clearTimeout(timer);
+    timers.clearTimer(timer);
     options.signal?.removeEventListener("abort", onCallerAbort);
     if (onAbort) controller.signal.removeEventListener("abort", onAbort);
   }

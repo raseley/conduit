@@ -38,6 +38,25 @@ const INT32_MAX = 2 ** 31 - 1;
 const UINT32_MAX = 2 ** 32 - 1;
 /** Field numbers are 29 bits. */
 const MAX_FIELD_NUMBER = 2 ** 29 - 1;
+/** The wire types a field key may be written with: no groups, nothing undefined. */
+const WRITABLE_WIRE_TYPES: ReadonlySet<number> = new Set([
+  WireType.Varint,
+  WireType.Fixed64,
+  WireType.LengthDelimited,
+  WireType.Fixed32,
+]);
+
+/**
+ * Copy `source[start, end)` into a new, plain `Uint8Array`. Not
+ * `source.slice()`: on a Node `Buffer` that returns a view sharing memory with
+ * the socket's chunk, so a reused read buffer would rewrite a frame after the
+ * fact.
+ */
+export function copyBytes(source: Uint8Array, start: number, end: number): Uint8Array {
+  const out = new Uint8Array(end - start);
+  out.set(source.subarray(start, end));
+  return out;
+}
 
 const utf8Encoder = new TextEncoder();
 // `fatal` makes invalid UTF-8 throw instead of decoding to U+FFFD, so a corrupt
@@ -66,6 +85,10 @@ export class Writer {
 
   /** A varint of a non-negative value below 2^64. */
   varint(value: bigint | number): this {
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      // `BigInt()` would throw a RangeError on a fraction or NaN.
+      throw new ProtocolError(`varint value ${value} is not a safe integer`);
+    }
     let v = typeof value === "bigint" ? value : BigInt(value);
     if (v < 0n || v >= UINT64_LIMIT) {
       throw new ProtocolError("varint value out of range");
@@ -83,6 +106,9 @@ export class Writer {
   tag(field: number, wireType: number): this {
     if (!Number.isInteger(field) || field < 1 || field > MAX_FIELD_NUMBER) {
       throw new ProtocolError(`invalid field number ${field}`);
+    }
+    if (!WRITABLE_WIRE_TYPES.has(wireType)) {
+      throw new ProtocolError(`cannot write wire type ${wireType}`);
     }
     return this.varint(field * 8 + wireType);
   }
@@ -219,15 +245,16 @@ export class Reader {
     let result = 0n;
     for (let i = 0; i < MAX_VARINT_BYTES; i++) {
       const byte = this.byte();
-      if (i === MAX_VARINT_BYTES - 1 && byte > 1) {
-        // The tenth byte holds only bit 63; anything more (a continuation bit
-        // included, which would make the varint longer than 10 bytes)
-        // overflows 64 bits.
-        throw new ProtocolError("varint overflows 64 bits");
+      if ((byte & 0x80) === 0) {
+        // The tenth byte holds only bit 63; any higher bit overflows 64 bits.
+        if (i === MAX_VARINT_BYTES - 1 && byte > 1) {
+          throw new ProtocolError("varint overflows 64 bits");
+        }
+        return result | (BigInt(byte) << BigInt(7 * i));
       }
       result |= BigInt(byte & 0x7f) << BigInt(7 * i);
-      if ((byte & 0x80) === 0) return result;
     }
+    // The tenth byte still had its continuation bit set.
     throw new ProtocolError("varint longer than 10 bytes");
   }
 
@@ -278,11 +305,14 @@ export class Reader {
     return value;
   }
 
-  /** A length-delimited value, copied out so the frame buffer is not retained. */
+  /**
+   * A length-delimited value, copied out (also from a `Buffer`) so the frame
+   * buffer is neither retained nor shared.
+   */
   bytes(): Uint8Array {
     const length = this.varint32();
     this.need(length);
-    const out = this.buf.slice(this.pos, this.pos + length);
+    const out = copyBytes(this.buf, this.pos, this.pos + length);
     this.pos += length;
     return out;
   }

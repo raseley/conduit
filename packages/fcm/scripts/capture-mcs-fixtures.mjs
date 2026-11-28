@@ -58,6 +58,8 @@ const Long = requireFromPushReceiver("long");
 // Loading gcm first installs push-receiver's `protobuf.util.Long` override.
 const gcm = requireFromPushReceiver("./src/gcm/index.js");
 const Client = requireFromPushReceiver("./src/client.js");
+// The MCS version and tag numbers, as push-receiver defines them.
+const mcsConstants = requireFromPushReceiver("./src/constants.js");
 
 const mcsRoot = await protobuf.load(resolve(pushReceiverDir, "src/mcs.proto"));
 const checkinRoot = await protobuf.load(resolve(pushReceiverDir, "src/gcm/checkin.proto"));
@@ -268,7 +270,6 @@ const longBody = JSON.stringify({
 
 const serverFrames = {
   loginResponseOk: {
-    tag: 3,
     type: "LoginResponse",
     input: {
       id: "made-up-login-id",
@@ -280,7 +281,6 @@ const serverFrames = {
     },
   },
   loginResponseError: {
-    tag: 3,
     type: "LoginResponse",
     input: {
       id: "made-up-login-id",
@@ -289,12 +289,10 @@ const serverFrames = {
   },
   // A negative int32 is a 10-byte varint on the wire.
   loginResponseNegativeCode: {
-    tag: 3,
     type: "LoginResponse",
     input: { id: "made-up-login-id", error: { code: -1 } },
   },
   dataMessage: {
-    tag: 8,
     type: "DataMessageStanza",
     input: {
       id: "made-up-message-id",
@@ -317,7 +315,6 @@ const serverFrames = {
     },
   },
   dataMessageEncrypted: {
-    tag: 8,
     type: "DataMessageStanza",
     input: {
       from: "000000000000",
@@ -332,28 +329,23 @@ const serverFrames = {
     },
   },
   dataMessageMinimal: {
-    tag: 8,
     type: "DataMessageStanza",
     input: { from: "000000000000", category: "com.facepunch.rust.companion" },
   },
   heartbeatPing: {
-    tag: 0,
     type: "HeartbeatPing",
     input: { streamId: 2, lastStreamIdReceived: 6, status: "1" },
   },
   heartbeatAck: {
-    tag: 1,
     type: "HeartbeatAck",
     input: { streamId: 3, lastStreamIdReceived: 7 },
   },
-  close: { tag: 4, type: "Close", input: {} },
+  close: { type: "Close", input: {} },
   streamError: {
-    tag: 10,
     type: "StreamErrorStanza",
     input: { type: "made-up-error-type", text: "made-up text" },
   },
   iqStanza: {
-    tag: 7,
     type: "IqStanza",
     input: {
       rmqId: "1",
@@ -365,29 +357,43 @@ const serverFrames = {
     },
   },
 };
-for (const entry of Object.values(serverFrames)) {
-  entry.hex = hex(encode(mcsRoot, `mcs_proto.${entry.type}`, entry.input));
+// Each frame's tag comes from push-receiver's own constants, so the tests that
+// check fcm's tag table against these fixtures are not checking it against
+// itself.
+const tagOf = (type) => {
+  const name = type === "DataMessageStanza" ? "kDataMessageStanzaTag" : `k${type}Tag`;
+  const tag = mcsConstants[name];
+  if (typeof tag !== "number") throw new Error(`push-receiver defines no ${name}`);
+  return tag;
+};
+for (const [name, entry] of Object.entries(serverFrames)) {
+  serverFrames[name] = {
+    tag: tagOf(entry.type),
+    type: entry.type,
+    input: entry.input,
+    hex: hex(encode(mcsRoot, `mcs_proto.${entry.type}`, entry.input)),
+  };
 }
 
-// A server stream: version byte, then frames, including a tag no known message
-// uses and a zero-size Close.
-const UNKNOWN_TAG = 15;
+// A server stream: version byte, then frames, including a tag push-receiver's
+// parser has no message for (TalkMetadata) and a zero-size Close.
+const UNKNOWN_TAG = mcsConstants.kTalkMetadataTag;
 const unknownPayload = Buffer.from("0a076d6164652d7570", "hex");
 const streamFrames = [
-  { tag: 3, payloadHex: serverFrames.loginResponseOk.hex },
-  { tag: 7, payloadHex: serverFrames.iqStanza.hex },
-  { tag: 0, payloadHex: serverFrames.heartbeatPing.hex },
-  { tag: 8, payloadHex: serverFrames.dataMessage.hex },
-  { tag: UNKNOWN_TAG, payloadHex: hex(unknownPayload) },
-  { tag: 8, payloadHex: serverFrames.dataMessageMinimal.hex },
-  { tag: 4, payloadHex: serverFrames.close.hex },
-];
+  serverFrames.loginResponseOk,
+  serverFrames.iqStanza,
+  serverFrames.heartbeatPing,
+  serverFrames.dataMessage,
+  { tag: UNKNOWN_TAG, hex: hex(unknownPayload) },
+  serverFrames.dataMessageMinimal,
+  serverFrames.close,
+].map((f) => ({ tag: f.tag, payloadHex: f.hex }));
 const serverStream = {
-  version: 41,
+  version: mcsConstants.kMCSVersion,
   frames: streamFrames,
   hex: hex(
     Buffer.concat([
-      Buffer.from([41]),
+      Buffer.from([mcsConstants.kMCSVersion]),
       ...streamFrames.map((f) => frame(f.tag, Buffer.from(f.payloadHex, "hex"))),
     ]),
   ),
