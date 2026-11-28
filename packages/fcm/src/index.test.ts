@@ -1,6 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 
-import { FcmService, PairingError, redact, REDACTED, SENSITIVE_KEYS, decodePush } from "./index.js";
+import {
+  ConnectionError,
+  FcmError,
+  FcmService,
+  PairingError,
+  ProtocolError,
+  redact,
+  REDACTED,
+  SENSITIVE_KEYS,
+  decodePush,
+} from "./index.js";
 import type { PushReceiverDriver, RawPush, PushConnection } from "./driver/pushReceiverDriver.js";
 import type { FcmCredentials } from "./types.js";
 
@@ -490,10 +500,41 @@ describe("redaction", () => {
     expect(redacted.pushover).toEqual({ appToken: REDACTED, userKey: REDACTED });
   });
 
+  it("masks a bare androidId, which the push client handles outside gcm", () => {
+    const redacted = redact({ device: { androidId: "4123456789012345678" } });
+    expect(JSON.stringify(redacted)).not.toContain("4123456789012345678");
+  });
+
   it("handles cycles without throwing", () => {
     const a: Record<string, unknown> = { name: "x" };
     a.self = a;
     expect(() => redact(a)).not.toThrow();
+  });
+});
+
+describe("typed errors", () => {
+  it("ProtocolError is an FcmError in the protocol category", () => {
+    const err = new ProtocolError("bad frame", { cause: new Error("inner") });
+    expect(err).toBeInstanceOf(FcmError);
+    expect(err.name).toBe("ProtocolError");
+    expect(err.category).toBe("protocol");
+    expect(err.cause).toBeInstanceOf(Error);
+  });
+
+  it("ConnectionError carries its safe-to-log failure kind, code and retry delay", () => {
+    const err = new ConnectionError("register3 failed", {
+      failure: "refused",
+      code: "PHONE_REGISTRATION_ERROR",
+      retryAfterMs: 30_000,
+    });
+    expect(err.category).toBe("connection");
+    expect(err.failure).toBe("refused");
+    expect(err.code).toBe("PHONE_REGISTRATION_ERROR");
+    expect(err.retryAfterMs).toBe(30_000);
+    const bare = new ConnectionError("dropped");
+    expect(bare.failure).toBeUndefined();
+    expect(bare.code).toBeUndefined();
+    expect(bare.retryAfterMs).toBeUndefined();
   });
 });
 
